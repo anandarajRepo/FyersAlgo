@@ -3,9 +3,13 @@ import logging
 import sys
 import os
 from typing import Dict
+from dotenv import load_dotenv
 from config.settings import FyersConfig, StrategyConfig, TradingConfig
 from utils.auth_helper import FyersAuthHelper
 from main_strategy import GapUpShortStrategy
+
+# Loading .env file for environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
