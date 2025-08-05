@@ -27,10 +27,10 @@ def load_config() -> Dict:
     # In production, load from environment variables or config file
     return {
         'fyers': FyersConfig(
-            client_id=os.environ.get('fyers_client_id'),
-            secret_key=os.environ.get('fyers_secret_key'),
-            redirect_uri=os.environ.get('fyers_redirect_uri'),
-            access_token=os.environ.get('fyers_access_token')
+            client_id=os.environ.get('FYERS_CLIENT_ID'),
+            secret_key=os.environ.get('FYERS_SECRET_KEY'),
+            redirect_uri=os.environ.get('FYERS_REDIRECT_URI'),
+            access_token=os.environ.get('FYERS_ACCESS_TOKEN')
         ),
         'strategy': StrategyConfig(
             portfolio_value=10000,
