@@ -115,11 +115,11 @@ class EnhancedMultiStrategyManager:
         logging.info(f"=== PORTFOLIO STATUS ===")
         logging.info(f"Total Positions: {total_positions}")
         logging.info(f"Gap-Up Short: {gap_up_perf['active_positions']} positions, "
-                     f"PnL: ₹{gap_up_perf['daily_pnl']:.2f}")
+                     f"PnL: Rs.{gap_up_perf['daily_pnl']:.2f}")
         logging.info(f"Breakout: {breakout_perf['active_positions']} positions, "
-                     f"PnL: ₹{breakout_perf['daily_pnl']:.2f}")
-        logging.info(f"Portfolio Daily PnL: ₹{self.daily_portfolio_pnl:.2f}")
-        logging.info(f"Portfolio Total PnL: ₹{self.total_portfolio_pnl:.2f}")
+                     f"PnL: Rs.{breakout_perf['daily_pnl']:.2f}")
+        logging.info(f"Portfolio Daily PnL: Rs.{self.daily_portfolio_pnl:.2f}")
+        logging.info(f"Portfolio Total PnL: Rs.{self.total_portfolio_pnl:.2f}")
 
     async def run(self) -> None:
         """Main multi-strategy execution loop"""
