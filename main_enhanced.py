@@ -2,6 +2,9 @@ import asyncio
 import logging
 import sys
 import os
+import requests
+import json
+import hashlib
 from typing import Dict
 from dotenv import load_dotenv
 
@@ -20,6 +23,9 @@ from services.market_timing_service import MarketTimingService
 from main_strategy import GapUpShortStrategy
 from strategies.open_breakout_strategy import OpenBreakoutStrategy
 
+# Import Fyers API
+from fyers_apiv3 import fyersModel
+
 # Load environment variables
 load_dotenv()
 
@@ -32,6 +38,191 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+
+
+class FyersAuthManager:
+    """Enhanced Fyers authentication manager with refresh token support"""
+
+    def __init__(self):
+        self.client_id = os.environ.get('FYERS_CLIENT_ID')
+        self.secret_key = os.environ.get('FYERS_SECRET_KEY')
+        self.redirect_uri = os.environ.get('FYERS_REDIRECT_URI', "https://trade.fyers.in/api-login/redirect-to-app")
+        self.refresh_token = os.environ.get('FYERS_REFRESH_TOKEN')
+        self.access_token = os.environ.get('FYERS_ACCESS_TOKEN')
+
+    def save_to_env(self, key, value):
+        """Save or update environment variable in .env file"""
+        env_file = '.env'
+
+        # Read existing .env file
+        env_vars = {}
+        if os.path.exists(env_file):
+            with open(env_file, 'r') as f:
+                for line in f:
+                    if '=' in line and not line.strip().startswith('#'):
+                        k, v = line.strip().split('=', 1)
+                        env_vars[k] = v
+
+        # Update the specific key
+        env_vars[key] = value
+
+        # Write back to .env file
+        with open(env_file, 'w') as f:
+            for k, v in env_vars.items():
+                f.write(f"{k}={v}\n")
+
+        # Update current environment
+        os.environ[key] = value
+
+    def generate_access_token_with_refresh(self, refresh_token):
+        """Generate new access token using refresh token"""
+        url = "https://api-t1.fyers.in/api/v3/validate-refresh-token"
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "grant_type": "refresh_token",
+            "appIdHash": self.get_app_id_hash(),
+            "refresh_token": refresh_token
+        }
+
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(data))
+            response_data = response.json()
+
+            if response_data.get('s') == 'ok' and 'access_token' in response_data:
+                return response_data['access_token'], response_data.get('refresh_token')
+            else:
+                logging.error(f"Error refreshing token: {response_data.get('message', 'Unknown error')}")
+                return None, None
+
+        except Exception as e:
+            logging.error(f"Exception while refreshing token: {e}")
+            return None, None
+
+    def get_app_id_hash(self):
+        """Generate app_id_hash for API calls"""
+        app_id = f"{self.client_id}:{self.secret_key}"
+        return hashlib.sha256(app_id.encode()).hexdigest()
+
+    def get_tokens_from_auth_code(self, auth_code):
+        """Get both access and refresh tokens from auth code"""
+        url = "https://api-t1.fyers.in/api/v3/validate-authcode"
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "grant_type": "authorization_code",
+            "appIdHash": self.get_app_id_hash(),
+            "code": auth_code
+        }
+
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(data))
+            response_data = response.json()
+
+            if response_data.get('s') == 'ok':
+                return (response_data.get('access_token'),
+                        response_data.get('refresh_token'))
+            else:
+                logging.error(f"Error getting tokens: {response_data.get('message', 'Unknown error')}")
+                return None, None
+
+        except Exception as e:
+            logging.error(f"Exception while getting tokens: {e}")
+            return None, None
+
+    def is_token_valid(self, access_token):
+        """Check if access token is still valid"""
+        if not access_token:
+            return False
+
+        # Create a test Fyers model instance
+        fyers = fyersModel.FyersModel(client_id=self.client_id, token=access_token)
+
+        try:
+            # Make a simple API call to test token validity
+            profile = fyers.get_profile()
+            return profile.get('s') == 'ok'
+        except:
+            return False
+
+    def get_valid_access_token(self):
+        """Get a valid access token, using refresh token if available"""
+
+        # First, check if current access token is still valid
+        if self.access_token and self.is_token_valid(self.access_token):
+            logging.info("✅ Current access token is still valid")
+            return self.access_token
+
+        # Try to use refresh token if available
+        if self.refresh_token:
+            logging.info("🔄 Access token expired, trying to refresh...")
+            new_access_token, new_refresh_token = self.generate_access_token_with_refresh(self.refresh_token)
+
+            if new_access_token:
+                logging.info("✅ Successfully refreshed access token")
+
+                # Save new tokens
+                self.save_to_env('FYERS_ACCESS_TOKEN', new_access_token)
+                self.access_token = new_access_token
+
+                if new_refresh_token:
+                    self.save_to_env('FYERS_REFRESH_TOKEN', new_refresh_token)
+                    self.refresh_token = new_refresh_token
+
+                return new_access_token
+            else:
+                logging.warning("❌ Failed to refresh access token, need to re-authenticate")
+
+        # If refresh failed or no refresh token, do full authentication
+        return self.setup_full_authentication()
+
+    def setup_full_authentication(self):
+        """Complete authentication flow to get new tokens"""
+        print("=== Fyers API Full Authentication Setup ===")
+
+        if not all([self.client_id, self.secret_key]):
+            print("❌ Missing CLIENT_ID or SECRET_KEY in environment variables")
+            return None
+
+        # Generate auth URL
+        auth_url = FyersAuthHelper.generate_auth_url(self.client_id, self.redirect_uri)
+
+        print(f"\n1. Open this URL: {auth_url}")
+        print("2. Complete authorization and get the code")
+
+        auth_code = input("\nEnter authorization code: ").strip()
+
+        # Get both access and refresh tokens
+        access_token, refresh_token = self.get_tokens_from_auth_code(auth_code)
+
+        if access_token:
+            print(f"\n=== Saving tokens to .env file ===")
+
+            # Save all tokens to .env
+            self.save_to_env('FYERS_CLIENT_ID', self.client_id)
+            self.save_to_env('FYERS_SECRET_KEY', self.secret_key)
+            self.save_to_env('FYERS_REDIRECT_URI', self.redirect_uri)
+            self.save_to_env('FYERS_ACCESS_TOKEN', access_token)
+
+            if refresh_token:
+                self.save_to_env('FYERS_REFRESH_TOKEN', refresh_token)
+                print(f"FYERS_REFRESH_TOKEN saved ✅")
+
+            print(f"\n✅ Authentication successful!")
+            print(f"Access Token: {access_token[:20]}...")
+            if refresh_token:
+                print(f"Refresh Token: {refresh_token[:20]}...")
+
+            return access_token
+        else:
+            print("❌ Authentication failed!")
+            return None
 
 
 class EnhancedMultiStrategyManager:
@@ -115,11 +306,11 @@ class EnhancedMultiStrategyManager:
         logging.info(f"=== PORTFOLIO STATUS ===")
         logging.info(f"Total Positions: {total_positions}")
         logging.info(f"Gap-Up Short: {gap_up_perf['active_positions']} positions, "
-                     f"PnL: Rs.{gap_up_perf['daily_pnl']:.2f}")
+                     f"PnL: ₹{gap_up_perf['daily_pnl']:.2f}")
         logging.info(f"Breakout: {breakout_perf['active_positions']} positions, "
-                     f"PnL: Rs.{breakout_perf['daily_pnl']:.2f}")
-        logging.info(f"Portfolio Daily PnL: Rs.{self.daily_portfolio_pnl:.2f}")
-        logging.info(f"Portfolio Total PnL: Rs.{self.total_portfolio_pnl:.2f}")
+                     f"PnL: ₹{breakout_perf['daily_pnl']:.2f}")
+        logging.info(f"Portfolio Daily PnL: ₹{self.daily_portfolio_pnl:.2f}")
+        logging.info(f"Portfolio Total PnL: ₹{self.total_portfolio_pnl:.2f}")
 
     async def run(self) -> None:
         """Main multi-strategy execution loop"""
@@ -192,41 +383,20 @@ def load_config() -> Dict:
 
 
 def authenticate_fyers(config: Dict) -> bool:
-    """Handle Fyers authentication"""
-    fyers_config = config['fyers']
+    """Handle Fyers authentication with refresh token support"""
+    auth_manager = FyersAuthManager()
 
-    if not fyers_config.access_token:
-        print("No access token found. Starting authentication...")
+    # Get valid access token (will auto-refresh if needed)
+    access_token = auth_manager.get_valid_access_token()
 
-        # Generate auth URL
-        auth_url = FyersAuthHelper.generate_auth_url(
-            fyers_config.client_id,
-            fyers_config.redirect_uri
-        )
-
-        print(f"\n1. Open this URL in your browser: {auth_url}")
-        print("2. Login and authorize the application")
-        print("3. Copy the authorization code from the redirect URL")
-
-        auth_code = input("\nEnter the authorization code: ").strip()
-
-        # Generate access token
-        access_token = FyersAuthHelper.generate_access_token(
-            fyers_config.client_id,
-            fyers_config.secret_key,
-            auth_code
-        )
-
-        if access_token:
-            fyers_config.access_token = access_token
-            print(f"Access token generated: {access_token}")
-            print("💡 Save this to your .env file as FYERS_ACCESS_TOKEN={access_token}")
-            return True
-        else:
-            print("Authentication failed")
-            return False
-
-    return True
+    if access_token:
+        # Update config with the valid token
+        config['fyers'].access_token = access_token
+        logging.info("✅ Fyers authentication successful")
+        return True
+    else:
+        logging.error("❌ Fyers authentication failed")
+        return False
 
 
 async def main_multi_strategy():
@@ -235,7 +405,7 @@ async def main_multi_strategy():
         # Load configuration
         config = load_config()
 
-        # Handle authentication
+        # Handle authentication with refresh token support
         if not authenticate_fyers(config):
             print("Authentication failed. Exiting...")
             return
@@ -260,7 +430,7 @@ async def main_single_strategy():
         # Load configuration
         config = load_config()
 
-        # Handle authentication
+        # Handle authentication with refresh token support
         if not authenticate_fyers(config):
             print("Authentication failed. Exiting...")
             return
@@ -280,9 +450,21 @@ async def main_single_strategy():
 
 
 def setup_auth_only():
-    """Standalone authentication setup"""
-    print("=== Fyers API Authentication Setup ===")
+    """Enhanced authentication setup with refresh token support"""
+    print("=== Enhanced Fyers API Authentication Setup ===")
 
+    # Check if we already have credentials in environment
+    if os.environ.get('FYERS_CLIENT_ID') and os.environ.get('FYERS_SECRET_KEY'):
+        print("Found existing credentials in environment")
+        auth_manager = FyersAuthManager()
+        access_token = auth_manager.get_valid_access_token()
+
+        if access_token:
+            print("✅ Authentication successful using existing/refreshed tokens!")
+            return
+
+    # Manual setup if no credentials or auth failed
+    print("\n=== Manual Authentication Setup ===")
     client_id = input("Enter your Fyers Client ID: ").strip()
     secret_key = input("Enter your Fyers Secret Key: ").strip()
     redirect_uri = input("Enter Redirect URI (or press Enter for default): ").strip()
@@ -290,26 +472,34 @@ def setup_auth_only():
     if not redirect_uri:
         redirect_uri = "https://trade.fyers.in/api-login/redirect-to-app"
 
-    # Generate auth URL
-    auth_url = FyersAuthHelper.generate_auth_url(client_id, redirect_uri)
+    # Update environment temporarily for this session
+    os.environ['FYERS_CLIENT_ID'] = client_id
+    os.environ['FYERS_SECRET_KEY'] = secret_key
+    os.environ['FYERS_REDIRECT_URI'] = redirect_uri
 
-    print(f"\n1. Open this URL: {auth_url}")
-    print("2. Complete authorization and get the code")
-
-    auth_code = input("\nEnter authorization code: ").strip()
-
-    # Generate token
-    access_token = FyersAuthHelper.generate_access_token(client_id, secret_key, auth_code)
+    # Use the auth manager for enhanced authentication
+    auth_manager = FyersAuthManager()
+    access_token = auth_manager.setup_full_authentication()
 
     if access_token:
-        print(f"\n=== Add these to your .env file ===")
-        print(f"FYERS_CLIENT_ID={client_id}")
-        print(f"FYERS_SECRET_KEY={secret_key}")
-        print(f"FYERS_REDIRECT_URI={redirect_uri}")
-        print(f"FYERS_ACCESS_TOKEN={access_token}")
-        print(f"\n✅ Authentication successful!")
+        print("\n✅ Enhanced authentication setup completed!")
+        print("Refresh token has been saved for automatic token renewal.")
     else:
-        print("❌ Authentication failed!")
+        print("❌ Authentication setup failed!")
+
+
+def create_fyers_session():
+    """Create authenticated Fyers session with refresh token support"""
+    auth_manager = FyersAuthManager()
+    access_token = auth_manager.get_valid_access_token()
+
+    if access_token:
+        client_id = os.environ.get('FYERS_CLIENT_ID')
+        fyers = fyersModel.FyersModel(client_id=client_id, token=access_token)
+        return fyers
+    else:
+        logging.error("❌ Failed to create Fyers session")
+        return None
 
 
 def main():
@@ -318,34 +508,58 @@ def main():
         command = sys.argv[1].lower()
 
         if command == "multi":
-            print("🚀 Starting Multi-Strategy Trading System...")
+            print("🚀 Starting Enhanced Multi-Strategy Trading System...")
             asyncio.run(main_multi_strategy())
         elif command == "single":
             print("📈 Starting Gap-Up Short Strategy...")
             asyncio.run(main_single_strategy())
         elif command == "auth":
             setup_auth_only()
+        elif command == "test-auth":
+            # Test authentication without running strategies
+            config = load_config()
+            if authenticate_fyers(config):
+                print("✅ Authentication test successful!")
+                # Test API call
+                fyers = create_fyers_session()
+                if fyers:
+                    profile = fyers.get_profile()
+                    print(f"Profile: {profile}")
+            else:
+                print("❌ Authentication test failed!")
         else:
             print("❓ Unknown command. Available options:")
-            print("  python main_enhanced.py multi   - Run multi-strategy system")
-            print("  python main_enhanced.py single  - Run gap-up short strategy only")
-            print("  python main_enhanced.py auth    - Setup Fyers authentication")
+            print("  python main_enhanced.py multi      - Run multi-strategy system")
+            print("  python main_enhanced.py single     - Run gap-up short strategy only")
+            print("  python main_enhanced.py auth       - Setup Fyers authentication")
+            print("  python main_enhanced.py test-auth  - Test authentication")
     else:
         print("🔧 Select trading mode:")
         print("1. Multi-Strategy System (Gap-Up Short + Breakout)")
         print("2. Single Strategy (Gap-Up Short only)")
         print("3. Setup Authentication")
+        print("4. Test Authentication")
 
-        choice = input("\nEnter choice (1/2/3): ").strip()
+        choice = input("\nEnter choice (1/2/3/4): ").strip()
 
         if choice == "1":
-            print("🚀 Starting Multi-Strategy Trading System...")
+            print("🚀 Starting Enhanced Multi-Strategy Trading System...")
             asyncio.run(main_multi_strategy())
         elif choice == "2":
             print("📈 Starting Gap-Up Short Strategy...")
             asyncio.run(main_single_strategy())
         elif choice == "3":
             setup_auth_only()
+        elif choice == "4":
+            config = load_config()
+            if authenticate_fyers(config):
+                print("✅ Authentication test successful!")
+                fyers = create_fyers_session()
+                if fyers:
+                    profile = fyers.get_profile()
+                    print(f"Profile: {profile}")
+            else:
+                print("❌ Authentication test failed!")
         else:
             print("❌ Invalid choice")
 
