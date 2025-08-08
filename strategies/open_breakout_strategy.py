@@ -303,7 +303,7 @@ class OpenBreakoutStrategy:
             # Log closed positions
             for closed_pos in pnl_summary.closed_positions:
                 logger.info(f"Breakout position closed: {closed_pos['symbol']}, "
-                            f"PnL: ₹{closed_pos['pnl']:.2f}")
+                            f"PnL: Rs.{closed_pos['pnl']:.2f}")
 
             # Generate new breakout signals if in breakout time window
             if self.is_breakout_time():
@@ -380,7 +380,7 @@ class OpenBreakoutStrategy:
                 self.positions[signal.symbol] = position
 
                 logger.info(f"New breakout position: {signal.symbol} - Qty: {quantity}, "
-                            f"Entry: ₹{signal.entry_price:.2f}")
+                            f"Entry: Rs.{signal.entry_price:.2f}")
 
                 # Place stop loss order
                 await self._place_stop_loss_order(position)
@@ -406,7 +406,7 @@ class OpenBreakoutStrategy:
 
             if sl_order:
                 position.sl_order_id = sl_order.get('id')
-                logger.info(f"Stop loss placed for {position.symbol} at ₹{position.stop_loss:.2f}")
+                logger.info(f"Stop loss placed for {position.symbol} at Rs.{position.stop_loss:.2f}")
 
         except Exception as e:
             logger.error(f"Error placing stop loss for {position.symbol}: {e}")
@@ -414,9 +414,9 @@ class OpenBreakoutStrategy:
     def _log_breakout_status(self, unrealized_pnl: float) -> None:
         """Log current breakout strategy status"""
         logger.info(f"Breakout Strategy - Active Positions: {len(self.positions)}, "
-                    f"Daily PnL: ₹{self.daily_pnl:.2f}, "
-                    f"Total PnL: ₹{self.total_pnl:.2f}, "
-                    f"Unrealized: ₹{unrealized_pnl:.2f}")
+                    f"Daily PnL: Rs.{self.daily_pnl:.2f}, "
+                    f"Total PnL: Rs.{self.total_pnl:.2f}, "
+                    f"Unrealized: Rs.{unrealized_pnl:.2f}")
 
     def get_breakout_performance(self) -> Dict:
         """Get breakout strategy performance"""

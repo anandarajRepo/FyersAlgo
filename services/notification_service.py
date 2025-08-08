@@ -69,9 +69,9 @@ Strategy: {trade_info.get('strategy', 'Unknown')}
 Symbol: {trade_info.get('symbol')}
 Action: {trade_info.get('action')}
 Quantity: {trade_info.get('quantity')}
-Price: ₹{trade_info.get('price', 0):.2f}
-Stop Loss: ₹{trade_info.get('stop_loss', 0):.2f}
-Target: ₹{trade_info.get('target', 0):.2f}
+Price: Rs.{trade_info.get('price', 0):.2f}
+Stop Loss: Rs.{trade_info.get('stop_loss', 0):.2f}
+Target: Rs.{trade_info.get('target', 0):.2f}
 Time: {datetime.now().strftime('%H:%M:%S')}
         """.strip()
 
@@ -82,13 +82,13 @@ Time: {datetime.now().strftime('%H:%M:%S')}
 Date: {datetime.now().strftime('%Y-%m-%d')}
 
 Portfolio Performance:
-• Total P&L: ₹{summary.get('total_pnl', 0):.2f}
-• Day P&L: ₹{summary.get('daily_pnl', 0):.2f}
+• Total P&L: Rs.{summary.get('total_pnl', 0):.2f}
+• Day P&L: Rs.{summary.get('daily_pnl', 0):.2f}
 • Active Positions: {summary.get('total_positions', 0)}
 
 Strategy Breakdown:
-• Gap-Up Short: {summary.get('gap_up_positions', 0)} positions, ₹{summary.get('gap_up_pnl', 0):.2f}
-• Breakout: {summary.get('breakout_positions', 0)} positions, ₹{summary.get('breakout_pnl', 0):.2f}
+• Gap-Up Short: {summary.get('gap_up_positions', 0)} positions, Rs.{summary.get('gap_up_pnl', 0):.2f}
+• Breakout: {summary.get('breakout_positions', 0)} positions, Rs.{summary.get('breakout_pnl', 0):.2f}
 
 Trades Today: {summary.get('trades_today', 0)}
 Win Rate: {summary.get('win_rate', 0):.1f}%
@@ -98,7 +98,7 @@ Win Rate: {summary.get('win_rate', 0):.1f}%
         """Format risk alert message"""
         return f"""
 Alert Type: {risk_info.get('alert_type')}
-Current Portfolio: ₹{risk_info.get('current_value', 0):.2f}
+Current Portfolio: Rs.{risk_info.get('current_value', 0):.2f}
 Daily P&L: {risk_info.get('daily_pnl_pct', 0):.2f}%
 Risk Level: {risk_info.get('risk_level', 'Unknown')}
 Action Required: {risk_info.get('action_required', 'Monitor')}

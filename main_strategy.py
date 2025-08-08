@@ -65,7 +65,7 @@ class GapUpShortStrategy:
             # Log closed positions
             for closed_pos in pnl_summary.closed_positions:
                 logger.info(f"Position closed: {closed_pos['symbol']}, "
-                            f"PnL: ₹{closed_pos['pnl']:.2f}")
+                            f"PnL: Rs.{closed_pos['pnl']:.2f}")
 
             # Generate new signals if in signal generation window
             if self.timing_service.is_signal_generation_time():
@@ -135,7 +135,7 @@ class GapUpShortStrategy:
                 self.positions[signal.symbol] = position
 
                 logger.info(f"New position: {signal.symbol} - Qty: {quantity}, "
-                            f"Entry: ₹{signal.entry_price:.2f}")
+                            f"Entry: Rs.{signal.entry_price:.2f}")
                 return True
 
             return False
@@ -147,9 +147,9 @@ class GapUpShortStrategy:
     def _log_status(self, unrealized_pnl: float) -> None:
         """Log current strategy status"""
         logger.info(f"Strategy Status - Active Positions: {len(self.positions)}, "
-                    f"Daily PnL: ₹{self.daily_pnl:.2f}, "
-                    f"Total PnL: ₹{self.total_pnl:.2f}, "
-                    f"Unrealized: ₹{unrealized_pnl:.2f}")
+                    f"Daily PnL: Rs.{self.daily_pnl:.2f}, "
+                    f"Total PnL: Rs.{self.total_pnl:.2f}, "
+                    f"Unrealized: Rs.{unrealized_pnl:.2f}")
 
     def get_performance_summary(self) -> Dict:
         """Get comprehensive performance summary"""
@@ -199,4 +199,4 @@ class GapUpShortStrategy:
         finally:
             # Print final performance
             performance = self.get_performance_summary()
-            logger.info(f"Final Performance: Total PnL: ₹{performance['total_pnl']:.2f}")
+            logger.info(f"Final Performance: Total PnL: Rs.{performance['total_pnl']:.2f}")
