@@ -40,5 +40,5 @@ class TradingConfig:
     market_end_minute: int = 30
     signal_generation_end_hour: int = 10
     signal_generation_end_minute: int = 30
-    monitoring_interval: int = 30
+    monitoring_interval: int = 1
     execution_delay: int = 5
