@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import pytz
 from typing import Dict, List
 from datetime import datetime, timedelta
 from dataclasses import dataclass
@@ -11,6 +12,9 @@ from services.position_service import PositionManagementService
 from services.market_timing_service import MarketTimingService
 
 logger = logging.getLogger(__name__)
+
+# Add IST timezone handling
+IST = pytz.timezone('Asia/Kolkata')
 
 
 @dataclass
@@ -274,7 +278,7 @@ class OpenBreakoutStrategy:
 
     def is_breakout_time(self) -> bool:
         """Check if it's time to look for breakouts (after opening range formation)"""
-        now = datetime.now()
+        now = datetime.now(IST)
 
         if not self.timing_service.is_trading_time():
             return False

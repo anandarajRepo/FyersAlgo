@@ -1,8 +1,12 @@
 from datetime import datetime
 from config.settings import TradingConfig
 import logging
+import pytz
 
 logger = logging.getLogger(__name__)
+
+# Add IST timezone handling
+IST = pytz.timezone('Asia/Kolkata')
 
 
 class MarketTimingService:
@@ -13,7 +17,7 @@ class MarketTimingService:
 
     def is_trading_time(self) -> bool:
         """Check if within trading hours"""
-        now = datetime.now()
+        now = datetime.now(IST)
         market_start = now.replace(
             hour=self.config.market_start_hour,
             minute=self.config.market_start_minute,
@@ -31,7 +35,7 @@ class MarketTimingService:
 
     def is_signal_generation_time(self) -> bool:
         """Check if within signal generation window"""
-        now = datetime.now()
+        now = datetime.now(IST)
 
         if not self.is_trading_time():
             return False
