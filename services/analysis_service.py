@@ -1,11 +1,15 @@
 import numpy as np
 import pandas as pd
 import logging
+import pytz
 from interfaces.data_provider import IDataProvider
 from models.trading_models import MarketData
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Add IST timezone handling
+IST = pytz.timezone('Asia/Kolkata')
 
 
 class TechnicalAnalysisService:
@@ -77,7 +81,7 @@ class TechnicalAnalysisService:
             current_volume = market_data.volume
 
             # Estimate full day volume
-            now = datetime.now()
+            now = datetime.now(IST)
             market_hours_elapsed = (now.hour - 9) + (now.minute - 15) / 60
             market_hours_elapsed = max(market_hours_elapsed, 0.5)
 
