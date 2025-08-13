@@ -52,12 +52,18 @@ class FyersService(IDataProvider, IBroker):
             'M&M.NS': 'NSE:M&M-EQ',
             'HEROMOTOCO.NS': 'NSE:HEROMOTOCO-EQ',
             'EICHERMOT.NS': 'NSE:EICHERMOT-EQ',
+            'RELIANCE.NS': 'NSE:RELIANCE-EQ',
         }
 
     def _make_request(self, method: str, endpoint: str, data: Dict = None) -> Optional[Dict]:
         """Make HTTP request to Fyers API"""
         try:
-            url = f"{self.config.base_url}{endpoint}"
+
+            if endpoint.endswith("/data/depth"):
+                url = f"{self.config.base_url_v1}{endpoint}"
+            else:
+                url = f"{self.config.base_url}{endpoint}"
+
             headers = {'Authorization': f"{self.config.client_id}:{self.config.access_token}"}
 
             if method.upper() == 'GET':
