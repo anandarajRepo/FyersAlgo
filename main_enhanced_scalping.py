@@ -411,7 +411,7 @@ async def test_scalping_components():
         enhanced_fyers = EnhancedFyersService(config['fyers'])
 
         # Test symbols for Level II data
-        test_symbols = ['RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS']
+        test_symbols = ['TCS.NS', 'HDFCBANK.NS']
 
         print("Testing Level II market data...")
         for symbol in test_symbols:

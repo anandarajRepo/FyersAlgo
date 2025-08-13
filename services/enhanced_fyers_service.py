@@ -82,6 +82,8 @@ class EnhancedFyersService(FyersService):
                 'ohlcv_flag': '1'
             })
 
+            depth_data = depth_data["d"]
+
             if not depth_data or fyers_symbol not in depth_data:
                 logger.warning(f"No market depth data for {symbol}")
                 return None
