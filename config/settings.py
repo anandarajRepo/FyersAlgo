@@ -18,7 +18,8 @@ class FyersConfig:
     secret_key: str
     redirect_uri: str
     access_token: Optional[str] = None
-    base_url: str = "https://api-t1.fyers.in"
+    base_url: str = "https://api-t1.fyers.in/api/v3"
+    base_url_v1: str = "https://api-t1.fyers.in"
 
 @dataclass
 class StrategyConfig:
