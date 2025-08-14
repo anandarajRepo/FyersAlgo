@@ -5,6 +5,7 @@ import json
 import logging
 import pandas as pd
 import yfinance as yf
+from urllib.parse import urlencode
 
 from typing import Dict, List, Optional
 from config.settings import FyersConfig
@@ -55,25 +56,118 @@ class FyersService(IDataProvider, IBroker):
             'RELIANCE.NS': 'NSE:RELIANCE-EQ',
         }
 
+    def _log_request_details(self, method: str, url: str, headers: Dict, data: Dict = None, is_get: bool = False):
+        """Log complete request details for debugging"""
+        logger.info("=" * 80)
+        logger.info("REQUEST DETAILS")
+        logger.info("=" * 80)
+        logger.info(f"Method: {method}")
+        logger.info(f"URL: {url}")
+
+        # Log headers (mask sensitive data)
+        safe_headers = headers.copy()
+        if 'Authorization' in safe_headers:
+            auth_parts = safe_headers['Authorization'].split(':')
+            if len(auth_parts) == 2:
+                safe_headers['Authorization'] = f"{auth_parts[0]}:***MASKED***"
+
+        logger.info(f"Headers: {json.dumps(safe_headers, indent=2)}")
+
+        if data:
+            if is_get:
+                # For GET requests, show how data becomes query parameters
+                query_string = urlencode(data)
+                full_url = f"{url}?{query_string}" if query_string else url
+                logger.info(f"Query Parameters: {json.dumps(data, indent=2)}")
+                logger.info(f"Full URL with params: {full_url}")
+            else:
+                # For non-GET requests, show JSON body
+                logger.info(f"JSON Body: {json.dumps(data, indent=2)}")
+        else:
+            logger.info("No data/parameters")
+
+        # Generate equivalent curl command
+        self._log_curl_equivalent(method, url, headers, data, is_get)
+        logger.info("=" * 80)
+
+    def _log_curl_equivalent(self, method: str, url: str, headers: Dict, data: Dict = None, is_get: bool = False):
+        """Generate and log equivalent curl command"""
+        curl_cmd = f"curl -X {method}"
+
+        # Add headers
+        for key, value in headers.items():
+            if key == 'Authorization':
+                # Mask token in curl command
+                auth_parts = value.split(':')
+                if len(auth_parts) == 2:
+                    masked_value = f"{auth_parts[0]}:YOUR_ACCESS_TOKEN"
+                    curl_cmd += f" -H '{key}: {masked_value}'"
+            else:
+                curl_cmd += f" -H '{key}: {value}'"
+
+        if data:
+            if is_get:
+                # For GET, add query parameters to URL
+                query_string = urlencode(data)
+                full_url = f"{url}?{query_string}" if query_string else url
+                curl_cmd += f" '{full_url}'"
+            else:
+                # For non-GET, add JSON data
+                curl_cmd += f" -H 'Content-Type: application/json'"
+                curl_cmd += f" -d '{json.dumps(data)}'"
+                curl_cmd += f" '{url}'"
+        else:
+            curl_cmd += f" '{url}'"
+
+        curl_cmd += " -v"  # Add verbose flag
+
+        logger.info("Equivalent curl command:")
+        logger.info(curl_cmd)
+
+    def _log_response_details(self, response: requests.Response):
+        """Log response details"""
+        logger.info("-" * 40)
+        logger.info("RESPONSE DETAILS")
+        logger.info("-" * 40)
+        logger.info(f"Status Code: {response.status_code}")
+        logger.info(f"Response Headers: {dict(response.headers)}")
+
+        try:
+            response_json = response.json()
+            logger.info(f"Response Body: {json.dumps(response_json, indent=2)}")
+        except:
+            logger.info(f"Response Body (raw): {response.text}")
+
+        logger.info("-" * 40)
+
     def _make_request(self, method: str, endpoint: str, data: Dict = None) -> Optional[Dict]:
         """Make HTTP request to Fyers API"""
         try:
 
-            if endpoint.endswith("/data/depth"):
+            if endpoint.endswith("/data/depth") or endpoint.startswith("/data/quotes"):
                 url = f"{self.config.base_url_v1}{endpoint}"
             else:
                 url = f"{self.config.base_url}{endpoint}"
 
             headers = {'Authorization': f"{self.config.client_id}:{self.config.access_token}"}
 
+            # Log request details before making the request
+            is_get_request = method.upper() == 'GET'
+            # self._log_request_details(method, url, headers, data, is_get_request)
+
             if method.upper() == 'GET':
                 response = self.session.get(url, headers=headers, params=data)
             else:
                 response = self.session.request(method, url, headers=headers, json=data)
 
+            # Log response details
+            # self._log_response_details(response)
+
+            # Process response (your original logic)
             if response.status_code == 200:
                 result = response.json()
                 if result['s'] == 'ok':
+                    logger.info("Request successful")
                     return result.get('data', result)
                 else:
                     logger.error(f"API Error: {result['message']}")
@@ -96,7 +190,7 @@ class FyersService(IDataProvider, IBroker):
                 'ohlcv_flag': '1'
             }
 
-            result = self._make_request('POST', '/data/quotes', data)
+            result = self._make_request('GET', '/data/quotes', data)
 
             if not result:
                 return {}
