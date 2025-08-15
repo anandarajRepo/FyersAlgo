@@ -5,7 +5,8 @@ import os
 import requests
 import json
 import hashlib
-from typing import Dict
+import getpass
+from typing import Dict, Optional, Tuple
 from dotenv import load_dotenv
 
 # Import configurations
@@ -41,7 +42,7 @@ logging.basicConfig(
 
 
 class FyersAuthManager:
-    """Enhanced Fyers authentication manager with refresh token support"""
+    """Enhanced Fyers authentication manager with refresh token and PIN support"""
 
     def __init__(self):
         self.client_id = os.environ.get('FYERS_CLIENT_ID')
@@ -49,8 +50,9 @@ class FyersAuthManager:
         self.redirect_uri = os.environ.get('FYERS_REDIRECT_URI', "https://trade.fyers.in/api-login/redirect-to-app")
         self.refresh_token = os.environ.get('FYERS_REFRESH_TOKEN')
         self.access_token = os.environ.get('FYERS_ACCESS_TOKEN')
+        self.pin = os.environ.get('FYERS_PIN')  # Load PIN from environment
 
-    def save_to_env(self, key, value):
+    def save_to_env(self, key: str, value: str) -> None:
         """Save or update environment variable in .env file"""
         env_file = '.env'
 
@@ -74,9 +76,37 @@ class FyersAuthManager:
         # Update current environment
         os.environ[key] = value
 
-    def generate_access_token_with_refresh(self, refresh_token):
-        """Generate new access token using refresh token"""
+    def get_or_request_pin(self) -> str:
+        """Get PIN from environment or request from user"""
+        if self.pin:
+            return self.pin
+
+        print("\n=== PIN Required for Token Refresh ===")
+        print("Your trading PIN is required for security authentication.")
+        print("This PIN will be saved securely in your .env file for future use.")
+
+        # Use getpass for secure PIN input (hides the input)
+        pin = getpass.getpass("Enter your Fyers trading PIN: ").strip()
+
+        if pin:
+            # Save PIN to environment for future use
+            self.save_to_env('FYERS_PIN', pin)
+            self.pin = pin
+            print("PIN saved successfully to .env file")
+            return pin
+        else:
+            raise ValueError("PIN is required for authentication")
+
+    def generate_access_token_with_refresh(self, refresh_token: str) -> Tuple[Optional[str], Optional[str]]:
+        """Generate new access token using refresh token with PIN verification"""
         url = "https://api-t1.fyers.in/api/v3/validate-refresh-token"
+
+        # Get PIN (from env or user input)
+        try:
+            pin = self.get_or_request_pin()
+        except ValueError as e:
+            logging.error(f"PIN error: {e}")
+            return None, None
 
         headers = {
             "Content-Type": "application/json"
@@ -85,7 +115,8 @@ class FyersAuthManager:
         data = {
             "grant_type": "refresh_token",
             "appIdHash": self.get_app_id_hash(),
-            "refresh_token": refresh_token
+            "refresh_token": refresh_token,
+            "pin": pin  # Include PIN in the request
         }
 
         try:
@@ -93,21 +124,43 @@ class FyersAuthManager:
             response_data = response.json()
 
             if response_data.get('s') == 'ok' and 'access_token' in response_data:
+                logging.info("Successfully refreshed access token with PIN verification")
                 return response_data['access_token'], response_data.get('refresh_token')
             else:
-                logging.error(f"Error refreshing token: {response_data.get('message', 'Unknown error')}")
+                error_msg = response_data.get('message', 'Unknown error')
+                error_code = response_data.get('code', 'Unknown')
+
+                # Handle specific PIN-related errors
+                if 'pin' in error_msg.lower() or 'invalid pin' in error_msg.lower():
+                    logging.error(f"PIN verification failed: {error_msg}")
+                    print("\n⚠️ PIN verification failed. The PIN might be incorrect.")
+
+                    # Clear the saved PIN and retry
+                    self.pin = None
+                    os.environ.pop('FYERS_PIN', None)
+
+                    retry = input("Would you like to retry with a different PIN? (y/n): ").strip().lower()
+                    if retry == 'y':
+                        # Recursive call to retry with new PIN
+                        return self.generate_access_token_with_refresh(refresh_token)
+                else:
+                    logging.error(f"Error refreshing token: {error_msg} (Code: {error_code})")
+
                 return None, None
 
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Network error while refreshing token: {e}")
+            return None, None
         except Exception as e:
-            logging.error(f"Exception while refreshing token: {e}")
+            logging.error(f"Unexpected error while refreshing token: {e}")
             return None, None
 
-    def get_app_id_hash(self):
+    def get_app_id_hash(self) -> str:
         """Generate app_id_hash for API calls"""
         app_id = f"{self.client_id}:{self.secret_key}"
         return hashlib.sha256(app_id.encode()).hexdigest()
 
-    def get_tokens_from_auth_code(self, auth_code):
+    def get_tokens_from_auth_code(self, auth_code: str) -> Tuple[Optional[str], Optional[str]]:
         """Get both access and refresh tokens from auth code"""
         url = "https://api-t1.fyers.in/api/v3/validate-authcode"
 
@@ -136,7 +189,7 @@ class FyersAuthManager:
             logging.error(f"Exception while getting tokens: {e}")
             return None, None
 
-    def is_token_valid(self, access_token):
+    def is_token_valid(self, access_token: str) -> bool:
         """Check if access token is still valid"""
         if not access_token:
             return False
@@ -151,7 +204,7 @@ class FyersAuthManager:
         except:
             return False
 
-    def get_valid_access_token(self):
+    def get_valid_access_token(self) -> Optional[str]:
         """Get a valid access token, using refresh token if available"""
 
         # First, check if current access token is still valid
@@ -182,13 +235,23 @@ class FyersAuthManager:
         # If refresh failed or no refresh token, do full authentication
         return self.setup_full_authentication()
 
-    def setup_full_authentication(self):
+    def setup_full_authentication(self) -> Optional[str]:
         """Complete authentication flow to get new tokens"""
-        print("=== Fyers API Full Authentication Setup ===")
+        print("\n=== Fyers API Full Authentication Setup ===")
 
         if not all([self.client_id, self.secret_key]):
             print("Missing CLIENT_ID or SECRET_KEY in environment variables")
             return None
+
+        # Ask for PIN during initial setup if not already saved
+        if not self.pin:
+            print("\n📌 Trading PIN Setup")
+            print("Your trading PIN will be needed for future token refreshes.")
+            pin = getpass.getpass("Enter your Fyers trading PIN (will be saved securely): ").strip()
+            if pin:
+                self.save_to_env('FYERS_PIN', pin)
+                self.pin = pin
+                print("PIN saved successfully")
 
         # Generate auth URL
         auth_url = FyersAuthHelper.generate_auth_url(self.client_id, self.redirect_uri)
@@ -223,6 +286,27 @@ class FyersAuthManager:
         else:
             print("Authentication failed!")
             return None
+
+    def update_pin(self) -> bool:
+        """Update or change the saved PIN"""
+        print("\n=== Update Trading PIN ===")
+        print("This will update your saved trading PIN.")
+
+        new_pin = getpass.getpass("Enter new PIN: ").strip()
+        confirm_pin = getpass.getpass("Confirm new PIN: ").strip()
+
+        if new_pin != confirm_pin:
+            print("❌ PINs do not match!")
+            return False
+
+        if new_pin:
+            self.save_to_env('FYERS_PIN', new_pin)
+            self.pin = new_pin
+            print("✅ PIN updated successfully")
+            return True
+        else:
+            print("❌ Invalid PIN")
+            return False
 
 
 class EnhancedMultiStrategyManager:
@@ -383,7 +467,7 @@ def load_config() -> Dict:
 
 
 def authenticate_fyers(config: Dict) -> bool:
-    """Handle Fyers authentication with refresh token support"""
+    """Handle Fyers authentication with refresh token and PIN support"""
     auth_manager = FyersAuthManager()
 
     # Get valid access token (will auto-refresh if needed)
@@ -450,8 +534,8 @@ async def main_single_strategy():
 
 
 def setup_auth_only():
-    """Enhanced authentication setup with refresh token support"""
-    print("=== Enhanced Fyers API Authentication Setup ===")
+    """Enhanced authentication setup with refresh token and PIN support"""
+    print("=== Enhanced Fyers API Authentication Setup with PIN ===")
 
     # Check if we already have credentials in environment
     if os.environ.get('FYERS_CLIENT_ID') and os.environ.get('FYERS_SECRET_KEY'):
@@ -483,13 +567,13 @@ def setup_auth_only():
 
     if access_token:
         print("\nEnhanced authentication setup completed!")
-        print("Refresh token has been saved for automatic token renewal.")
+        print("Refresh token and PIN have been saved for automatic token renewal.")
     else:
         print("Authentication setup failed!")
 
 
 def create_fyers_session():
-    """Create authenticated Fyers session with refresh token support"""
+    """Create authenticated Fyers session with refresh token and PIN support"""
     auth_manager = FyersAuthManager()
     access_token = auth_manager.get_valid_access_token()
 
@@ -515,6 +599,10 @@ def main():
             asyncio.run(main_single_strategy())
         elif command == "auth":
             setup_auth_only()
+        elif command == "update-pin":
+            # New command to update PIN
+            auth_manager = FyersAuthManager()
+            auth_manager.update_pin()
         elif command == "test-auth":
             # Test authentication without running strategies
             config = load_config()
@@ -529,18 +617,20 @@ def main():
                 print("Authentication test failed!")
         else:
             print("  Unknown command. Available options:")
-            print("  python main_enhanced.py multi      - Run multi-strategy system")
-            print("  python main_enhanced.py single     - Run gap-up short strategy only")
-            print("  python main_enhanced.py auth       - Setup Fyers authentication")
-            print("  python main_enhanced.py test-auth  - Test authentication")
+            print("  python main_enhanced.py multi       - Run multi-strategy system")
+            print("  python main_enhanced.py single      - Run gap-up short strategy only")
+            print("  python main_enhanced.py auth        - Setup Fyers authentication")
+            print("  python main_enhanced.py update-pin  - Update trading PIN")
+            print("  python main_enhanced.py test-auth   - Test authentication")
     else:
         print("🔧 Select trading mode:")
         print("1. Multi-Strategy System (Gap-Up Short + Breakout)")
         print("2. Single Strategy (Gap-Up Short only)")
         print("3. Setup Authentication")
-        print("4. Test Authentication")
+        print("4. Update Trading PIN")
+        print("5. Test Authentication")
 
-        choice = input("\nEnter choice (1/2/3/4): ").strip()
+        choice = input("\nEnter choice (1/2/3/4/5): ").strip()
 
         if choice == "1":
             print("Starting Enhanced Multi-Strategy Trading System...")
@@ -551,6 +641,9 @@ def main():
         elif choice == "3":
             setup_auth_only()
         elif choice == "4":
+            auth_manager = FyersAuthManager()
+            auth_manager.update_pin()
+        elif choice == "5":
             config = load_config()
             if authenticate_fyers(config):
                 print("Authentication test successful!")
