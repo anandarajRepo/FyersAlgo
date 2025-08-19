@@ -229,7 +229,7 @@ class FyersService(IDataProvider, IBroker):
     async def get_index_data(self, index_symbol: str = 'NSE:NIFTY50-INDEX') -> Dict:
         """Get index data"""
         try:
-            result = self._make_request('POST', '/data/quotes', {
+            result = self._make_request('GET', '/data/quotes', {
                 'symbols': index_symbol,
                 'ohlcv_flag': '1'
             })
