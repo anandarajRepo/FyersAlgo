@@ -1,0 +1,5 @@
+# Start scalping at 9:15 AM on weekdays
+55 8 * * 1-5 /root/FyersAlgo/run_scalping.sh >> /var/log/scalping.log 2>&1
+
+# Stop scalping at 3:30 PM every day
+30 15 * * 1-5 /root/FyersAlgo/stop_scalping.sh >> /var/log/scalping.log 2>&1
