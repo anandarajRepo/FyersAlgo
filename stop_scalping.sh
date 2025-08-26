@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Log the stop attempt
-echo "$(date): Attempting to stop scalping process..." >> /var/log/scalping_stop.log
+echo "$(date): Attempting to stop scalping process..." >> /var/log/scalping.log
 
 # Method 1: Find and kill by script name
 pkill -f "main_enhanced_scalping.py scalping"
@@ -16,11 +16,11 @@ sleep 5
 pkill -9 -f "main_enhanced_scalping.py scalping"
 
 # Log completion
-echo "$(date): Stop script completed" >> /var/log/scalping_stop.log
+echo "$(date): Stop script completed" >> /var/log/scalping.log
 
 # Optional: Check if process is still running
 if pgrep -f "main_enhanced_scalping.py scalping" > /dev/null; then
-    echo "$(date): WARNING - Process still running!" >> /var/log/scalping_stop.log
+    echo "$(date): WARNING - Process still running!" >> /var/log/scalping.log
 else
-    echo "$(date): Process successfully stopped" >> /var/log/scalping_stop.log
+    echo "$(date): Process successfully stopped" >> /var/log/scalping.log
 fi
