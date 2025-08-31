@@ -199,6 +199,7 @@ class Level2ScalpingSignalService:
             # Get market data for all symbols
             symbols = list(self.scalping_universe.keys())
             market_data_dict = await self.fyers_service.get_quotes(symbols)
+            logger.info(f"market_data_dict: {market_data_dict}")
 
             for symbol, sector in self.scalping_universe.items():
                 try:
@@ -207,6 +208,7 @@ class Level2ScalpingSignalService:
                         continue
 
                     if symbol not in market_data_dict:
+                        logger.info(f"Symbol not found in market_data_dict: {symbol}")
                         continue
 
                     market_data = market_data_dict[symbol]
@@ -214,10 +216,12 @@ class Level2ScalpingSignalService:
                     # Get Level II data
                     order_book = await self.level2_service.get_order_book(symbol)
                     if not order_book:
+                        logger.info(f"Order book not found for symbol: {order_book}")
                         continue
 
                     # Check spread constraints
                     if not self._check_spread_constraints(order_book, config):
+                        logger.info(f"Check spread constraints for symbol: {symbol}, constraints: {self._check_spread_constraints(order_book, config)}")
                         continue
 
                     # Analyze for scalping opportunities
@@ -458,8 +462,7 @@ class Level2ScalpingStrategy:
 
             # Log closed positions
             for closed_pos in pnl_summary.closed_positions:
-                logger.info(f"Scalping position closed: {closed_pos['symbol']}, "
-                            f"PnL: Rs.{closed_pos['pnl']:.2f}")
+                logger.info(f"Scalping position closed: {closed_pos['symbol']}, "f"PnL: Rs.{closed_pos['pnl']:.2f}")
 
             # Generate new signals if in scalping time and have available slots
             if (self.is_scalping_time() and
