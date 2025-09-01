@@ -91,10 +91,10 @@ class Level2DataService:
                 'ohlcv_flag': '1'
             })
 
-            if not depth_data or fyers_symbol not in depth_data:
+            if not depth_data or fyers_symbol not in depth_data['d']:
                 return None
 
-            market_depth = depth_data[fyers_symbol]
+            market_depth = depth_data['d'][fyers_symbol]
 
             # Parse bid data
             bids = []
@@ -109,8 +109,8 @@ class Level2DataService:
 
             # Parse ask data
             asks = []
-            if 'asks' in market_depth:
-                for i, ask in enumerate(market_depth['asks']):
+            if 'ask' in market_depth:
+                for i, ask in enumerate(market_depth['ask']):
                     asks.append(OrderBookLevel(
                         price=ask['price'],
                         quantity=ask['volume'],
@@ -183,9 +183,6 @@ class Level2ScalpingSignalService:
             'ICICIBANK.NS': Sector.BANKING,
             'ITC.NS': Sector.FMCG,
             'SBIN.NS': Sector.BANKING,
-            'HINDUNILVR.NS': Sector.FMCG,
-            'LT.NS': Sector.METALS,
-            'AXISBANK.NS': Sector.BANKING,
         }
 
         # Track recent signals to avoid over-trading
@@ -216,7 +213,7 @@ class Level2ScalpingSignalService:
                     # Get Level II data
                     order_book = await self.level2_service.get_order_book(symbol)
                     if not order_book:
-                        logger.info(f"Order book not found for symbol: {order_book}")
+                        logger.info(f"Order book not found for symbol: {symbol}")
                         continue
 
                     # Check spread constraints
