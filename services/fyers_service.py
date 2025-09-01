@@ -198,15 +198,17 @@ class FyersService(IDataProvider, IBroker):
             market_data = {}
             for symbol in symbols:
                 fyers_symbol = self.symbol_mapping.get(symbol, symbol)
-                if fyers_symbol in result:
-                    quote = result[fyers_symbol]
+                matches = [item for item in result.get('d', []) if item.get('n') == fyers_symbol]
+                if len(matches) > 0:
+                # if fyers_symbol in result:
+                    quote = matches[0]['v']
                     market_data[symbol] = MarketData(
                         symbol=symbol,
                         current_price=quote['lp'],
-                        open_price=quote['o'],
-                        high_price=quote['h'],
-                        low_price=quote['l'],
-                        volume=quote.get('vol', 0),
+                        open_price=quote['open_price'],
+                        high_price=quote['high_price'],
+                        low_price=quote['low_price'],
+                        volume=quote['volume'],
                         previous_close=quote['prev_close_price'],
                         timestamp=datetime.now()
                     )
